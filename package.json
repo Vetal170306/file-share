@@ -1,0 +1,25 @@
+{
+  "name": "secure-file-sharing",
+  "version": "1.0.0",
+  "description": "A secure file sharing system with authentication, file management, and sharing capabilities",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "file-sharing",
+    "secure",
+    "authentication",
+    "jwt",
+    "express",
+    "react"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

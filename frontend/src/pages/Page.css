@@ -1,0 +1,12 @@
+.page {
+  padding: 2rem 0;
+}
+
+.page h1 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.page p {
+  color: #7f8c8d;
+}
