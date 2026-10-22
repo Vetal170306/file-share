@@ -8,5 +8,6 @@ router.get('/received', auth, getReceivedShares)
 router.get('/sent', auth, getSentShares)
 router.post('/:id/access', auth, accessShare)
 router.delete('/:id/revoke', auth, revokeShare)
+router.delete('/:id', auth, revokeShare)
 
 module.exports = router

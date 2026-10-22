@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../utils/api'
 import './SharedWithMe.css'
 
@@ -35,7 +36,7 @@ const SharedByMe = () => {
     try {
       await api.delete(`/shares/${shareId}/revoke`)
       setShares(shares.map(s => s.id === shareId ? { ...s, status: 'REVOKED', revoked_at: new Date().toISOString() } : s))
-      setSuccessMsg('Share access revoked successfully')
+      setSuccessMsg(`Share access revoked for ${receiverEmail}`)
       setTimeout(() => setSuccessMsg(''), 3000)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to revoke share')
@@ -56,9 +57,7 @@ const SharedByMe = () => {
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric'
     })
   }
 
@@ -70,52 +69,60 @@ const SharedByMe = () => {
 
   return (
     <div className="shared-page">
-      <div className="page-header">
+      <div className="shared-top-header">
         <div>
-          <h1>📤 Shared By Me</h1>
-          <p className="page-subtitle">Track and manage all files you've shared with others</p>
+          <div className="badge-row">
+            <span className="badge badge-brand">Outgoing Shares</span>
+            <span className="file-count-indicator">{shares.length} Total</span>
+          </div>
+          <h1 className="page-heading">Shared By Me</h1>
+          <p className="page-sub">Monitor outgoing permissions, passwords, and revoke access on demand</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <a href="/my-files" className="btn-action btn-view" style={{ textDecoration: 'none' }}>
+          <Link to="/my-files" className="btn-primary btn-sm">
             ➕ Share Another File
-          </a>
-          <button onClick={fetchSentShares} className="btn-refresh">
+          </Link>
+          <button onClick={fetchSentShares} className="btn-secondary btn-sm">
             🔄 Refresh
           </button>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
-      {successMsg && <div className="success-banner">{successMsg}</div>}
+      {error && <div className="alert-box error">{error}</div>}
+      {successMsg && <div className="alert-box success">{successMsg}</div>}
 
-      <div className="search-container">
+      <div className="search-bar-container glass-card">
+        <span className="search-icon">🔍</span>
         <input
           type="text"
-          placeholder="🔍 Search by file name, recipient name, or email..."
+          placeholder="Search by file name, recipient name, or email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
+          className="search-input-field"
         />
+        {searchTerm && (
+          <button onClick={() => setSearchTerm('')} className="clear-search-btn">✕</button>
+        )}
       </div>
 
       {loading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading your shares...</p>
+        <div className="shared-loading-state">
+          <div className="ai-glow-spinner"></div>
+          <p>Loading outgoing shares...</p>
         </div>
       ) : filteredShares.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">📤</div>
+        <div className="shared-empty-state glass-card">
+          <span className="empty-inbox-icon">📤</span>
           <h3>No outgoing shares found</h3>
-          <p>{searchTerm ? 'No matches found' : 'You have not shared any files yet. Go to "My Files" to share a file with someone.'}</p>
+          <p>{searchTerm ? 'No matches found.' : 'You have not shared any files yet. Go to "My Files" to share a file with someone.'}</p>
           {!searchTerm && (
-            <a href="/my-files" className="upload-button-small" style={{ marginTop: '1rem', display: 'inline-block' }}>
+            <Link to="/my-files" className="btn-primary" style={{ marginTop: '1rem' }}>
               Go to My Files
-            </a>
+            </Link>
           )}
         </div>
       ) : (
-        <div className="shares-table-container">
+        <div className="shares-table-wrapper glass-card">
           <table className="shares-table">
             <thead>
               <tr>
@@ -127,55 +134,64 @@ const SharedByMe = () => {
                 <th>Shared Date</th>
                 <th>Expires</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th className="th-actions">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredShares.map(share => (
-                <tr key={share.id} className={`status-row-${share.status.toLowerCase()}`}>
-                  <td className="col-filename">
-                    <strong>{share.original_name}</strong>
+                <tr key={share.id} className={`share-row ${share.status.toLowerCase()}`}>
+                  <td>
+                    <div className="share-name-cell">
+                      <span className="file-icon-mini">📄</span>
+                      <strong className="share-file-title" title={share.original_name}>
+                        {share.original_name}
+                      </strong>
+                    </div>
                   </td>
                   <td>
-                    <div>{share.receiver_name}</div>
-                    <span className="sub-text">{share.receiver_email}</span>
+                    <div className="sender-cell">
+                      <span className="sender-name">{share.receiver_name}</span>
+                      <span className="sender-email">{share.receiver_email}</span>
+                    </div>
                   </td>
                   <td>{formatFileSize(share.file_size)}</td>
                   <td>
-                    <span className={`badge badge-perm-${share.permission}`}>
+                    <span className={`badge ${share.permission === 'download' ? 'badge-success' : 'badge-brand'}`}>
                       {share.permission === 'download' ? '⬇️ Download' : '👁️ View Only'}
                     </span>
                   </td>
                   <td>
                     {share.is_password_protected ? (
-                      <span className="badge badge-locked">🔒 Password</span>
+                      <span className="badge badge-warning">🔒 Protected</span>
                     ) : (
-                      <span className="sub-text">Standard</span>
+                      <span className="meta-sub">Standard</span>
                     )}
                   </td>
                   <td>{formatDate(share.created_at)}</td>
                   <td>
-                    <span className={share.expires_at && new Date(share.expires_at) < new Date() ? 'text-expired' : ''}>
+                    <span className={`expiry-date ${share.expires_at && new Date(share.expires_at) < new Date() ? 'expired-text' : ''}`}>
                       {formatDate(share.expires_at)}
                     </span>
                   </td>
                   <td>
-                    <span className={`badge badge-status-${share.status.toLowerCase()}`}>
+                    <span className={`badge ${share.status === 'ACTIVE' ? 'badge-success' : share.status === 'EXPIRED' ? 'badge-warning' : 'badge-danger'}`}>
                       {share.status}
                     </span>
                   </td>
-                  <td className="col-actions">
-                    {share.status === 'ACTIVE' ? (
-                      <button
-                        onClick={() => handleRevoke(share.id, share.original_name, share.receiver_email)}
-                        className="btn-action btn-revoke"
-                        title="Revoke Share Access"
-                      >
-                        🚫 Revoke
-                      </button>
-                    ) : (
-                      <span className="sub-text">Revoked / Expired</span>
-                    )}
+                  <td>
+                    <div className="actions-cell">
+                      {share.status === 'ACTIVE' ? (
+                        <button
+                          onClick={() => handleRevoke(share.id, share.original_name, share.receiver_email)}
+                          className="btn-danger btn-xs"
+                          title="Revoke Share Access"
+                        >
+                          🚫 Revoke Access
+                        </button>
+                      ) : (
+                        <span className="meta-sub">Revoked / Expired</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

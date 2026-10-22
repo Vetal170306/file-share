@@ -23,13 +23,30 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    const email = formData.email.trim()
+    const password = formData.password
+
+    if (!email) {
+      setError('Please enter your email address')
+      return
+    }
+
+    if (!password) {
+      setError('Please enter your password')
+      return
+    }
+
     setLoading(true)
 
     try {
-      await login(formData.email, formData.password)
+      await login(email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed')
+      const serverMsg = err.response?.data?.message || 
+        err.response?.data?.errors?.[0]?.msg || 
+        'Login failed. Please check your credentials.'
+      setError(serverMsg)
     } finally {
       setLoading(false)
     }

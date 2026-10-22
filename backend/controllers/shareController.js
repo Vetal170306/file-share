@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs')
 const pool = require('../config/database')
 const { logActivity } = require('../utils/activityLogger')
+const { createNotification } = require('../utils/notificationService')
 
 const createShare = async (req, res) => {
   try {
@@ -25,20 +26,44 @@ const createShare = async (req, res) => {
       return res.status(403).json({ message: 'Access denied: You do not own this file' })
     }
 
-    // Find receiver
-    const [receivers] = await pool.query(
-      'SELECT id, name, email FROM users WHERE email = ?',
-      [receiver_email.trim().toLowerCase()]
-    )
+    // Find or auto-provision receiver
+    const cleanEmail = receiver_email.trim().toLowerCase()
 
-    if (receivers.length === 0) {
-      return res.status(404).json({ message: 'User with this email was not found' })
+    if (cleanEmail === (req.user.email || '').toLowerCase()) {
+      return res.status(400).json({ message: 'You cannot share a file with yourself' })
     }
 
-    const receiver = receivers[0]
+    const [receivers] = await pool.query(
+      'SELECT id, name, email FROM users WHERE email = ?',
+      [cleanEmail]
+    )
 
-    if (receiver.id === req.user.id) {
-      return res.status(400).json({ message: 'You cannot share a file with yourself' })
+    let receiver
+    let isNewInvite = false
+
+    if (receivers.length === 0) {
+      // Recipient is not registered yet: auto-provision an invited account so sharing works with ANY email
+      const emailPrefix = cleanEmail.split('@')[0]
+      const defaultName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1)
+      const randomSeed = Math.random().toString(36).substring(2, 12)
+      const placeholderHash = `$INVITED$${await bcrypt.hash(randomSeed, 10)}`
+
+      const [insertUser] = await pool.query(
+        'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
+        [defaultName, cleanEmail, placeholderHash, 'USER', 'ACTIVE']
+      )
+
+      receiver = {
+        id: insertUser.insertId,
+        name: defaultName,
+        email: cleanEmail
+      }
+      isNewInvite = true
+    } else {
+      receiver = receivers[0]
+      if (receiver.id === req.user.id) {
+        return res.status(400).json({ message: 'You cannot share a file with yourself' })
+      }
     }
 
     // Calculate expiration if provided
@@ -77,8 +102,19 @@ const createShare = async (req, res) => {
       ipAddress: req.ip
     })
 
+    // Dispatch notification to receiver
+    await createNotification({
+      userId: receiver.id,
+      type: 'SHARE_RECEIVED',
+      title: 'New File Shared With You',
+      message: `${req.user.name || 'A user'} shared "${file.original_name}" with you (${safePermission} access).`,
+      link: '/shared-with-me'
+    })
+
     res.status(201).json({
-      message: 'File shared successfully',
+      message: isNewInvite
+        ? `File shared and secure invitation created for ${receiver.email}`
+        : 'File shared successfully',
       share: {
         id: result.insertId,
         file_id,
@@ -86,7 +122,8 @@ const createShare = async (req, res) => {
         receiver_email: receiver.email,
         permission: safePermission,
         has_password: !!passwordHash,
-        expires_at: calculatedExpiresAt
+        expires_at: calculatedExpiresAt,
+        is_new_invite: isNewInvite
       }
     })
   } catch (error) {
@@ -110,6 +147,7 @@ const getReceivedShares = async (req, res) => {
         f.file_size,
         f.mime_type,
         f.uploaded_at,
+        f.current_version,
         u.name AS sender_name,
         u.email AS sender_email,
         CASE 
@@ -146,6 +184,7 @@ const getSentShares = async (req, res) => {
         f.original_name,
         f.file_size,
         f.mime_type,
+        f.current_version,
         u.name AS receiver_name,
         u.email AS receiver_email,
         CASE 
@@ -174,7 +213,7 @@ const accessShare = async (req, res) => {
     const { password, action } = req.body || {}
 
     const [shares] = await pool.query(
-      `SELECT s.*, f.original_name, f.stored_name, f.file_path, f.file_size, f.mime_type
+      `SELECT s.*, f.original_name, f.stored_name, f.file_path, f.file_size, f.mime_type, f.owner_id
        FROM shares s
        JOIN files f ON s.file_id = f.id
        WHERE s.id = ?`,
@@ -225,6 +264,16 @@ const accessShare = async (req, res) => {
       if (share.permission !== 'download') {
         return res.status(403).json({ message: 'You only have permission to view this file, not download it' })
       }
+
+      // Notify file owner of download
+      await createNotification({
+        userId: share.owner_id,
+        type: 'DOWNLOAD_ALERT',
+        title: 'Shared File Downloaded',
+        message: `${req.user.name || 'Recipient'} downloaded your shared file "${share.original_name}".`,
+        link: '/shared-by-me'
+      })
+
       return res.download(share.file_path, share.original_name)
     }
 
@@ -249,7 +298,7 @@ const revokeShare = async (req, res) => {
     const { id } = req.params
 
     const [shares] = await pool.query(
-      'SELECT * FROM shares WHERE id = ?',
+      `SELECT s.*, f.original_name FROM shares s JOIN files f ON s.file_id = f.id WHERE s.id = ?`,
       [id]
     )
 
@@ -274,6 +323,15 @@ const revokeShare = async (req, res) => {
       fileId: share.file_id,
       details: { shareId: id },
       ipAddress: req.ip
+    })
+
+    // Notify receiver of revocation
+    await createNotification({
+      userId: share.receiver_id,
+      type: 'SHARE_REVOKED',
+      title: 'Shared Access Revoked',
+      message: `Access to shared file "${share.original_name}" was revoked by the sender.`,
+      link: '/shared-with-me'
     })
 
     res.json({ message: 'Share access revoked successfully' })

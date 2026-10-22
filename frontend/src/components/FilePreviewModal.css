@@ -1,0 +1,118 @@
+.preview-modal {
+  max-width: 900px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background: rgba(30, 41, 59, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.preview-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.preview-filename {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f8fafc;
+  word-break: break-all;
+}
+
+.preview-meta {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+  background: #0b0f19;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.preview-image-container {
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #ffffff;
+}
+
+.preview-text-box {
+  width: 100%;
+  height: 100%;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.preview-code-block {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(15, 23, 42, 0.8);
+  padding: 1.25rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.preview-unsupported {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  color: #94a3b8;
+}
+
+.unsupported-icon {
+  font-size: 3.5rem;
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.preview-unsupported h4 {
+  color: #e2e8f0;
+  margin-bottom: 0.5rem;
+}
+
+.preview-loading, .preview-error {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+}

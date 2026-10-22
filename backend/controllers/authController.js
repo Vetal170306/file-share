@@ -6,45 +6,67 @@ require('dotenv').config()
 
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body
+    let { name, email, password } = req.body
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'All fields are required' })
     }
 
+    name = name.trim()
+    email = email.trim().toLowerCase()
+
     const [existingUser] = await pool.query(
-      'SELECT id FROM users WHERE email = ?',
+      'SELECT id, password_hash, role FROM users WHERE email = ?',
       [email]
     )
 
+    let userId
+    let userRole = 'USER'
+    let isClaimedInvite = false
+
     if (existingUser.length > 0) {
-      return res.status(400).json({ message: 'Email already registered' })
+      const userRecord = existingUser[0]
+      // Check if user was auto-provisioned via share invite
+      if (userRecord.password_hash && userRecord.password_hash.startsWith('$INVITED$')) {
+        const passwordHash = await bcrypt.hash(password, 10)
+        await pool.query(
+          'UPDATE users SET name = ?, password_hash = ?, status = ? WHERE id = ?',
+          [name, passwordHash, 'ACTIVE', userRecord.id]
+        )
+        userId = userRecord.id
+        userRole = userRecord.role || 'USER'
+        isClaimedInvite = true
+      } else {
+        return res.status(400).json({ message: 'Email already registered' })
+      }
+    } else {
+      const passwordHash = await bcrypt.hash(password, 10)
+      const [result] = await pool.query(
+        'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
+        [name, email, passwordHash, 'USER', 'ACTIVE']
+      )
+      userId = result.insertId
     }
 
-    const passwordHash = await bcrypt.hash(password, 10)
-
-    const [result] = await pool.query(
-      'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)',
-      [name, email, passwordHash, 'USER', 'ACTIVE']
-    )
-
     const token = jwt.sign(
-      { id: result.insertId, email, role: 'USER' },
+      { id: userId, email, role: userRole },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     )
 
     await logActivity({
-      userId: result.insertId,
-      action: 'USER_REGISTER',
-      details: { email, name },
+      userId,
+      action: isClaimedInvite ? 'USER_CLAIM_INVITE' : 'USER_REGISTER',
+      details: { email, name, isClaimedInvite },
       ipAddress: req.ip
     })
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: isClaimedInvite
+        ? 'Account activated successfully! Any shared files are now accessible in Shared With Me.'
+        : 'User registered successfully',
       token,
-      user: { id: result.insertId, name, email, role: 'USER' }
+      user: { id: userId, name, email, role: userRole }
     })
   } catch (error) {
     console.error('Registration error:', error)
@@ -54,7 +76,13 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body
+    let { email, password } = req.body
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' })
+    }
+
+    email = email.trim().toLowerCase()
 
     const [users] = await pool.query(
       'SELECT * FROM users WHERE email = ?',
@@ -62,18 +90,39 @@ const login = async (req, res) => {
     )
 
     if (users.length === 0) {
+      await pool.query(
+        `INSERT INTO security_events (event_type, email, ip_address, details, severity) 
+         VALUES ('FAILED_LOGIN', ?, ?, 'Non-existent account login attempt', 'MEDIUM')`,
+        [email, req.ip]
+      )
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
     const user = users[0]
 
+    if (user.password_hash && user.password_hash.startsWith('$INVITED$')) {
+      return res.status(401).json({
+        message: 'This email received a shared file invitation. Please use the Register page to set your password and access your files.'
+      })
+    }
+
     if (user.status !== 'ACTIVE') {
-      return res.status(403).json({ message: 'Account is not active' })
+      await pool.query(
+        `INSERT INTO security_events (event_type, email, ip_address, details, severity) 
+         VALUES ('BLOCKED_LOGIN_ATTEMPT', ?, ?, ?, 'HIGH')`,
+        [email, req.ip, `Login attempt on ${user.status} account`]
+      )
+      return res.status(403).json({ message: `Account is ${user.status.toLowerCase()}` })
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
 
     if (!isValidPassword) {
+      await pool.query(
+        `INSERT INTO security_events (event_type, email, ip_address, details, severity) 
+         VALUES ('FAILED_LOGIN', ?, ?, 'Incorrect password provided', 'MEDIUM')`,
+        [email, req.ip]
+      )
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 

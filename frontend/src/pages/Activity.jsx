@@ -7,6 +7,7 @@ const Activity = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filterAction, setFilterAction] = useState('ALL')
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     fetchActivities()
@@ -29,25 +30,32 @@ const Activity = () => {
   const getActionBadge = (action) => {
     switch (action) {
       case 'FILE_UPLOAD':
-        return { label: 'Upload', icon: '📤', color: 'upload' }
+        return { label: 'Upload', icon: '📤', badgeClass: 'badge-brand' }
+      case 'FILE_VERSION_UPLOAD':
+        return { label: 'New Version', icon: '🕒', badgeClass: 'badge-ai' }
+      case 'FILE_VERSION_RESTORE':
+        return { label: 'Rollback', icon: '↺', badgeClass: 'badge-warning' }
       case 'FILE_DOWNLOAD':
       case 'FILE_SHARE_DOWNLOAD':
-        return { label: 'Download', icon: '⬇️', color: 'download' }
+        return { label: 'Download', icon: '⬇️', badgeClass: 'badge-success' }
       case 'FILE_DELETE':
-        return { label: 'Delete', icon: '🗑️', color: 'delete' }
+        return { label: 'Delete', icon: '🗑️', badgeClass: 'badge-danger' }
       case 'FILE_SHARE_CREATE':
-        return { label: 'Shared File', icon: '🔗', color: 'share' }
+        return { label: 'Shared Link', icon: '🔗', badgeClass: 'badge-brand' }
       case 'FILE_SHARE_ACCESS':
       case 'FILE_SHARE_VIEW':
-        return { label: 'Viewed Share', icon: '👁️', color: 'view' }
+        return { label: 'Viewed', icon: '👁️', badgeClass: 'badge-brand' }
       case 'FILE_SHARE_REVOKE':
-        return { label: 'Revoked Share', icon: '🚫', color: 'revoke' }
+        return { label: 'Revoked', icon: '🚫', badgeClass: 'badge-danger' }
+      case 'AI_DOCUMENT_ANALYSIS':
+      case 'AI_DOCUMENT_QA':
+        return { label: 'AI Processing', icon: '✨', badgeClass: 'badge-ai' }
       case 'USER_LOGIN':
-        return { label: 'Login', icon: '🔐', color: 'auth' }
+        return { label: 'Login', icon: '🔐', badgeClass: 'badge-success' }
       case 'USER_REGISTER':
-        return { label: 'Registration', icon: '✨', color: 'auth' }
+        return { label: 'Registration', icon: '✨', badgeClass: 'badge-brand' }
       default:
-        return { label: action.replace(/_/g, ' '), icon: '📋', color: 'default' }
+        return { label: action.replace(/_/g, ' '), icon: '📋', badgeClass: 'badge-brand' }
     }
   }
 
@@ -64,92 +72,114 @@ const Activity = () => {
   }
 
   const filteredActivities = activities.filter(item => {
-    if (filterAction === 'ALL') return true
-    return item.action.includes(filterAction)
+    const matchesFilter = filterAction === 'ALL' || item.action.includes(filterAction)
+    if (!matchesFilter) return false
+
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase()
+      const matchesSearch = item.action.toLowerCase().includes(s) ||
+        (item.file_name && item.file_name.toLowerCase().includes(s)) ||
+        (item.ip_address && item.ip_address.includes(s))
+      return matchesSearch
+    }
+
+    return true
   })
 
   return (
     <div className="activity-page">
-      <div className="activity-header">
+      <div className="activity-top-header">
         <div>
-          <h1>📜 Activity & Security Audit Log</h1>
-          <p className="page-subtitle">Track security events, file transfers, and account access</p>
+          <div className="badge-row">
+            <span className="badge badge-brand">Audit Trail</span>
+            <span className="file-count-indicator">{activities.length} Recorded Events</span>
+          </div>
+          <h1 className="page-heading">Security & Activity Log</h1>
+          <p className="page-sub">Cryptographically logged audit trail of all file transfers, logins, and share actions</p>
         </div>
-        <div className="activity-controls">
+        <button onClick={fetchActivities} className="btn-secondary btn-sm">
+          🔄 Refresh Log
+        </button>
+      </div>
+
+      {error && <div className="alert-box error">{error}</div>}
+
+      <div className="files-controls-bar glass-card">
+        <div className="search-box-wrapper">
+          <span className="search-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Search activity by action, filename, or IP..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-text-input"
+          />
+        </div>
+
+        <div className="view-and-sort-controls">
           <select
             value={filterAction}
             onChange={(e) => setFilterAction(e.target.value)}
-            className="select-filter"
+            className="sort-dropdown"
           >
-            <option value="ALL">All Events</option>
-            <option value="FILE_UPLOAD">File Uploads</option>
+            <option value="ALL">All Event Types</option>
+            <option value="FILE_UPLOAD">Uploads & Versions</option>
             <option value="DOWNLOAD">Downloads</option>
-            <option value="SHARE">Shares</option>
+            <option value="SHARE">Shares & Revocations</option>
+            <option value="AI">AI Interactions</option>
             <option value="DELETE">Deletions</option>
-            <option value="USER">Auth & Login</option>
+            <option value="USER">Authentication</option>
           </select>
-          <button onClick={fetchActivities} className="btn-refresh">
-            🔄 Refresh
-          </button>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
-
       {loading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading activity logs...</p>
+        <div className="activity-loading-state">
+          <div className="ai-glow-spinner"></div>
+          <p>Retrieving immutable audit logs...</p>
         </div>
       ) : filteredActivities.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">📜</div>
-          <h3>No activity logs found</h3>
-          <p>Actions such as uploads, downloads, and shares will be automatically recorded here.</p>
+        <div className="activity-empty-state glass-card">
+          <span className="empty-log-icon">📜</span>
+          <h3>No matching activity entries found</h3>
+          <p>Actions performed on the platform will be cryptographically indexed here.</p>
         </div>
       ) : (
-        <div className="timeline-container">
+        <div className="timeline-wrapper">
           {filteredActivities.map((act) => {
             const badge = getActionBadge(act.action)
             return (
-              <div key={act.id} className="timeline-card">
-                <div className={`timeline-icon-bubble bubble-${badge.color}`}>
-                  {badge.icon}
+              <div key={act.id} className="timeline-entry glass-card">
+                <div className="timeline-badge-block">
+                  <span className="timeline-icon">{badge.icon}</span>
                 </div>
-                <div className="timeline-content">
-                  <div className="timeline-top">
-                    <span className={`badge-pill pill-${badge.color}`}>
-                      {badge.label}
-                    </span>
-                    <span className="timeline-time">{formatDate(act.created_at)}</span>
+                <div className="timeline-main">
+                  <div className="timeline-header-row">
+                    <span className={`badge ${badge.badgeClass}`}>{badge.label}</span>
+                    <span className="timeline-timestamp">{formatDate(act.created_at)}</span>
                   </div>
-                  <div className="timeline-body">
+
+                  <div className="timeline-body-text">
                     {act.file_name && (
-                      <p className="timeline-file">
-                        📄 File: <strong>{act.file_name}</strong>
-                      </p>
+                      <div className="timeline-target-file">
+                        📄 Target File: <strong>{act.file_name}</strong>
+                      </div>
                     )}
-                    {act.details && (
-                      <div className="timeline-details">
-                        {typeof act.details === 'object' ? (
-                          <div className="details-tags">
-                            {Object.entries(act.details).map(([k, v]) => (
-                              <span key={k} className="detail-tag">
-                                <strong>{k}:</strong> {String(v)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p>{act.details}</p>
-                        )}
+
+                    {act.details && typeof act.details === 'object' && (
+                      <div className="details-chips-wrap">
+                        {Object.entries(act.details).map(([k, v]) => (
+                          <span key={k} className="detail-chip">
+                            <span className="chip-key">{k}:</span> {String(v)}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
-                  {act.ip_address && (
-                    <div className="timeline-meta">
-                      <span>IP: {act.ip_address}</span>
-                    </div>
-                  )}
+
+                  <div className="timeline-footer-row">
+                    <span className="ip-badge">IP: {act.ip_address || '127.0.0.1'}</span>
+                  </div>
                 </div>
               </div>
             )

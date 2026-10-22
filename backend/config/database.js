@@ -1,5 +1,6 @@
 const mysql = require('mysql2/promise')
-require('dotenv').config()
+const path = require('path')
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 
 // Handle empty password for MySQL connections
 const dbPassword = process.env.DB_PASSWORD || ''

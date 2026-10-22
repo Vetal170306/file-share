@@ -6,6 +6,9 @@ import './AdminDashboard.css'
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null)
   const [activities, setActivities] = useState([])
+  const [securityEvents, setSecurityEvents] = useState([])
+  const [activeTab, setActiveTab] = useState('security') // 'security' | 'activity'
+  const [severityFilter, setSeverityFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -16,15 +19,17 @@ const AdminDashboard = () => {
   const fetchAdminData = async () => {
     try {
       setLoading(true)
-      const [statsRes, actRes] = await Promise.all([
+      const [statsRes, actRes, secRes] = await Promise.all([
         api.get('/admin/statistics'),
-        api.get('/admin/activity')
+        api.get('/admin/activity'),
+        api.get('/admin/security-events')
       ])
       setStats(statsRes.data.statistics)
       setActivities(actRes.data.activities || [])
+      setSecurityEvents(secRes.data.events || [])
       setError('')
     } catch (err) {
-      setError('Failed to load admin statistics and activities')
+      setError('Failed to load admin security center data')
       console.error('Admin fetch error:', err)
     } finally {
       setLoading(false)
@@ -50,125 +55,230 @@ const AdminDashboard = () => {
     })
   }
 
+  const filteredEvents = securityEvents.filter(ev => {
+    if (severityFilter === 'all') return true
+    return ev.severity === severityFilter
+  })
+
   return (
     <div className="admin-page">
+      {/* Top Header */}
       <div className="admin-header">
         <div>
-          <div className="admin-badge">🛡️ Administrator Console</div>
-          <h1>System Overview & Analytics</h1>
-          <p className="page-subtitle">Real-time telemetry and management controls</p>
+          <div className="badge-row">
+            <span className="badge badge-warning">🛡️ SOC & Security Center</span>
+            <span className="file-count-indicator">Role: System Administrator</span>
+          </div>
+          <h1 className="page-heading">Admin Security & Telemetry</h1>
+          <p className="page-sub">Real-time threat monitoring, failed login tracking, and global access audits</p>
         </div>
         <div className="admin-actions-bar">
-          <Link to="/admin/users" className="btn-admin-nav">
-            👥 Manage Users
+          <Link to="/admin/users" className="btn-primary btn-sm">
+            👥 User Management & RBAC
           </Link>
-          <button onClick={fetchAdminData} className="btn-refresh">
-            🔄 Refresh
+          <button onClick={fetchAdminData} className="btn-secondary btn-sm">
+            🔄 Refresh Metrics
           </button>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="alert-box error">{error}</div>}
 
       {loading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Gathering system statistics...</p>
+        <div className="admin-loading-state">
+          <div className="ai-glow-spinner"></div>
+          <p>Compiling database security telemetry...</p>
         </div>
       ) : (
         <>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon-wrapper user-bg">👥</div>
-              <div className="stat-content">
-                <span className="stat-label">Total Users</span>
-                <span className="stat-value">{stats?.users?.total || 0}</span>
-                <span className="stat-sub">{stats?.users?.active || 0} active • {stats?.users?.admins || 0} admins</span>
+          {/* Top KPI Grid */}
+          <div className="admin-kpi-grid">
+            <div className="kpi-card glass-card">
+              <div className="kpi-icon-box" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+                👥
+              </div>
+              <div className="kpi-data">
+                <span className="kpi-number">{stats?.users?.total || 0}</span>
+                <span className="kpi-label">Registered Accounts</span>
+                <span className="kpi-sub-text">{stats?.users?.active || 0} active • {stats?.users?.suspended || 0} suspended</span>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon-wrapper file-bg">📁</div>
-              <div className="stat-content">
-                <span className="stat-label">Total Files</span>
-                <span className="stat-value">{stats?.files?.total || 0}</span>
-                <span className="stat-sub">{formatFileSize(stats?.files?.totalStorageBytes || 0)} used</span>
+            <div className="kpi-card glass-card">
+              <div className="kpi-icon-box" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#22d3ee' }}>
+                📁
+              </div>
+              <div className="kpi-data">
+                <span className="kpi-number">{stats?.files?.total || 0}</span>
+                <span className="kpi-label">Encrypted Files</span>
+                <span className="kpi-sub-text">{formatFileSize(stats?.files?.totalStorageBytes || 0)} storage</span>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon-wrapper share-bg">🔗</div>
-              <div className="stat-content">
-                <span className="stat-label">Total Shares</span>
-                <span className="stat-value">{stats?.shares?.total || 0}</span>
-                <span className="stat-sub">{stats?.shares?.active || 0} active links</span>
+            <div className="kpi-card glass-card">
+              <div className="kpi-icon-box" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                🔗
+              </div>
+              <div className="kpi-data">
+                <span className="kpi-number">{stats?.shares?.total || 0}</span>
+                <span className="kpi-label">Share Links</span>
+                <span className="kpi-sub-text">{stats?.shares?.active || 0} active • {stats?.shares?.passwordProtected || 0} passcode</span>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon-wrapper audit-bg">📜</div>
-              <div className="stat-content">
-                <span className="stat-label">Audit Logs</span>
-                <span className="stat-value">{stats?.activities?.total || 0}</span>
-                <span className="stat-sub">System events recorded</span>
+            <div className="kpi-card glass-card">
+              <div className="kpi-icon-box" style={{ background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' }}>
+                🛡️
+              </div>
+              <div className="kpi-data">
+                <span className="kpi-number">{stats?.security?.events24h || 0}</span>
+                <span className="kpi-label">Security Alerts (24h)</span>
+                <span className="kpi-sub-text">{stats?.security?.totalEvents || 0} total events logged</span>
               </div>
             </div>
           </div>
 
-          <div className="admin-section">
-            <div className="section-header">
-              <h2>🛡️ System-Wide Security & Activity Logs</h2>
-              <span className="sub-text">Showing latest {activities.length} entries</span>
+          {/* Storage Distribution Visual */}
+          {stats?.files?.breakdown?.length > 0 && (
+            <div className="storage-dist-card glass-card">
+              <h3 className="section-title">📦 Global Storage Distribution by File Type</h3>
+              <div className="breakdown-pills-row">
+                {stats.files.breakdown.map((b, i) => (
+                  <div key={i} className="storage-type-pill">
+                    <span className="pill-type-name">{b.category}</span>
+                    <span className="pill-type-val">{formatFileSize(b.total_bytes)} ({b.count} files)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Security Tabs & Tables */}
+          <div className="admin-logs-card glass-card">
+            <div className="admin-tabs-row">
+              <div className="tab-buttons-group">
+                <button
+                  className={`admin-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('security')}
+                >
+                  🛡️ Security Alerts & Failed Logins ({securityEvents.length})
+                </button>
+                <button
+                  className={`admin-tab-btn ${activeTab === 'activity' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('activity')}
+                >
+                  📜 System Audit Trail ({activities.length})
+                </button>
+              </div>
+
+              {activeTab === 'security' && (
+                <div className="severity-filter-group">
+                  <span className="filter-label">Severity:</span>
+                  <select
+                    value={severityFilter}
+                    onChange={(e) => setSeverityFilter(e.target.value)}
+                    className="severity-dropdown"
+                  >
+                    <option value="all">All Severities</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                  </select>
+                </div>
+              )}
             </div>
 
-            <div className="shares-table-container">
-              <table className="shares-table">
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>User</th>
-                    <th>Action</th>
-                    <th>Target File</th>
-                    <th>IP Address</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activities.map((act) => (
-                    <tr key={act.id}>
-                      <td>{formatDate(act.created_at)}</td>
-                      <td>
-                        {act.user_name ? (
-                          <div>
-                            <strong>{act.user_name}</strong>
-                            <span className="sub-text">{act.user_email}</span>
-                          </div>
-                        ) : (
-                          <span className="sub-text">System / Guest</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="badge-pill pill-default">
-                          {act.action}
-                        </span>
-                      </td>
-                      <td>
-                        {act.file_name ? <span>📄 {act.file_name}</span> : <span className="sub-text">-</span>}
-                      </td>
-                      <td>
-                        <code>{act.ip_address || '127.0.0.1'}</code>
-                      </td>
-                    </tr>
-                  ))}
-                  {activities.length === 0 && (
+            {activeTab === 'security' ? (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
-                        No audit activities recorded yet.
-                      </td>
+                      <th>Timestamp</th>
+                      <th>Event Type</th>
+                      <th>Account / Email</th>
+                      <th>Severity</th>
+                      <th>Details</th>
+                      <th>IP Address</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredEvents.map(ev => (
+                      <tr key={ev.id}>
+                        <td>{formatDate(ev.created_at)}</td>
+                        <td>
+                          <span className="event-type-badge">{ev.event_type}</span>
+                        </td>
+                        <td>
+                          <strong>{ev.email || 'Anonymous'}</strong>
+                        </td>
+                        <td>
+                          <span className={`badge ${
+                            ev.severity === 'CRITICAL' ? 'badge-danger' :
+                            ev.severity === 'HIGH' ? 'badge-danger' :
+                            ev.severity === 'MEDIUM' ? 'badge-warning' : 'badge-brand'
+                          }`}>
+                            {ev.severity}
+                          </span>
+                        </td>
+                        <td className="event-details-cell">{ev.details || '-'}</td>
+                        <td><code>{ev.ip_address || '127.0.0.1'}</code></td>
+                      </tr>
+                    ))}
+                    {filteredEvents.length === 0 && (
+                      <tr>
+                        <td colSpan="6" className="table-empty-td">
+                          No security events recorded under this filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>User</th>
+                      <th>Action</th>
+                      <th>Target File</th>
+                      <th>IP Address</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activities.map(act => (
+                      <tr key={act.id}>
+                        <td>{formatDate(act.created_at)}</td>
+                        <td>
+                          {act.user_name ? (
+                            <div>
+                              <strong>{act.user_name}</strong>
+                              <span className="meta-sub">{act.user_email}</span>
+                            </div>
+                          ) : (
+                            <span className="meta-sub">System / Automated</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="badge badge-brand">{act.action}</span>
+                        </td>
+                        <td>{act.file_name ? `📄 ${act.file_name}` : '-'}</td>
+                        <td><code>{act.ip_address || '127.0.0.1'}</code></td>
+                      </tr>
+                    ))}
+                    {activities.length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="table-empty-td">
+                          No audit activity entries logged.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

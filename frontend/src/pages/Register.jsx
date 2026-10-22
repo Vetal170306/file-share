@@ -26,12 +26,27 @@ const Register = () => {
     e.preventDefault()
     setError('')
 
-    if (formData.password !== formData.confirmPassword) {
+    const name = formData.name.trim()
+    const email = formData.email.trim()
+    const password = formData.password
+
+    if (!name) {
+      setError('Please enter your full name')
+      return
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+    if (!email || !emailRegex.test(email)) {
+      setError('Please enter a valid email address (e.g. user@example.com)')
+      return
+    }
+
+    if (password !== formData.confirmPassword) {
       setError('Passwords do not match')
       return
     }
 
-    if (formData.password.length < 6) {
+    if (password.length < 6) {
       setError('Password must be at least 6 characters')
       return
     }
@@ -39,10 +54,13 @@ const Register = () => {
     setLoading(true)
 
     try {
-      await register(formData.name, formData.email, formData.password)
+      await register(name, email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed')
+      const serverMsg = err.response?.data?.message || 
+        err.response?.data?.errors?.[0]?.msg || 
+        'Registration failed. Please try again.'
+      setError(serverMsg)
     } finally {
       setLoading(false)
     }

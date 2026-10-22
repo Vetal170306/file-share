@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../utils/api'
+import AiAssistantModal from '../components/AiAssistantModal'
+import FilePreviewModal from '../components/FilePreviewModal'
 import './SharedWithMe.css'
 
 const SharedWithMe = () => {
@@ -9,11 +11,15 @@ const SharedWithMe = () => {
   const [successMsg, setSuccessMsg] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
 
-  // Password prompt state
+  // Password unlock state
   const [passwordModalShare, setPasswordModalShare] = useState(null)
   const [passwordInput, setPasswordInput] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [actionInProgress, setActionInProgress] = useState(false)
+
+  // AI & Preview Modals
+  const [aiModalFile, setAiModalFile] = useState(null)
+  const [previewingFile, setPreviewingFile] = useState(null)
 
   useEffect(() => {
     fetchReceivedShares()
@@ -80,8 +86,12 @@ const SharedWithMe = () => {
           action: 'view'
         })
         if (passwordModalShare) setPasswordModalShare(null)
-        setSuccessMsg(`Verified access for "${response.data.file.original_name}" (${response.data.file.permission} mode)`)
-        setTimeout(() => setSuccessMsg(''), 4000)
+        setPreviewingFile({
+          id: share.file_id,
+          original_name: share.original_name,
+          file_size: share.file_size,
+          mime_type: share.mime_type
+        })
       }
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to access file'
@@ -109,9 +119,7 @@ const SharedWithMe = () => {
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric'
     })
   }
 
@@ -123,113 +131,135 @@ const SharedWithMe = () => {
 
   return (
     <div className="shared-page">
-      <div className="page-header">
+      <div className="shared-top-header">
         <div>
-          <h1>📥 Shared With Me</h1>
-          <p className="page-subtitle">Files shared with you by other users</p>
+          <div className="badge-row">
+            <span className="badge badge-brand">Incoming Shares</span>
+            <span className="file-count-indicator">{shares.length} Items</span>
+          </div>
+          <h1 className="page-heading">Shared With Me</h1>
+          <p className="page-sub">Access encrypted files shared by colleagues and collaborators</p>
         </div>
-        <button onClick={fetchReceivedShares} className="btn-refresh">
-          🔄 Refresh
+        <button onClick={fetchReceivedShares} className="btn-secondary btn-sm">
+          🔄 Refresh Shares
         </button>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
-      {successMsg && <div className="success-banner">{successMsg}</div>}
+      {error && <div className="alert-box error">{error}</div>}
+      {successMsg && <div className="alert-box success">{successMsg}</div>}
 
-      <div className="search-container">
+      <div className="search-bar-container glass-card">
+        <span className="search-icon">🔍</span>
         <input
           type="text"
-          placeholder="🔍 Search by file name, sender name, or email..."
+          placeholder="Search by file name, sender name, or sender email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
+          className="search-input-field"
         />
+        {searchTerm && (
+          <button onClick={() => setSearchTerm('')} className="clear-search-btn">✕</button>
+        )}
       </div>
 
       {loading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading shared files...</p>
+        <div className="shared-loading-state">
+          <div className="ai-glow-spinner"></div>
+          <p>Loading incoming shares...</p>
         </div>
       ) : filteredShares.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">📂</div>
-          <h3>No shared files found</h3>
-          <p>{searchTerm ? 'No matches for your search' : 'When someone shares a file with your email, it will appear here.'}</p>
+        <div className="shared-empty-state glass-card">
+          <span className="empty-inbox-icon">📥</span>
+          <h3>No incoming shares found</h3>
+          <p>{searchTerm ? 'No files match your search query.' : 'When someone shares an encrypted file with your email, it will appear here.'}</p>
         </div>
       ) : (
-        <div className="shares-table-container">
+        <div className="shares-table-wrapper glass-card">
           <table className="shares-table">
             <thead>
               <tr>
                 <th>File Name</th>
-                <th>Shared By</th>
+                <th>Sender</th>
                 <th>Size</th>
                 <th>Permission</th>
-                <th>Security</th>
+                <th>Passcode</th>
                 <th>Expires</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th className="th-actions">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredShares.map(share => (
-                <tr key={share.id} className={`status-row-${share.status.toLowerCase()}`}>
-                  <td className="col-filename">
-                    <strong>{share.original_name}</strong>
+                <tr key={share.id} className={`share-row ${share.status.toLowerCase()}`}>
+                  <td>
+                    <div className="share-name-cell">
+                      <span className="file-icon-mini">📄</span>
+                      <span className="share-file-title" title={share.original_name}>
+                        {share.original_name}
+                      </span>
+                    </div>
                   </td>
                   <td>
-                    <div>{share.sender_name}</div>
-                    <span className="sub-text">{share.sender_email}</span>
+                    <div className="sender-cell">
+                      <span className="sender-name">{share.sender_name}</span>
+                      <span className="sender-email">{share.sender_email}</span>
+                    </div>
                   </td>
                   <td>{formatFileSize(share.file_size)}</td>
                   <td>
-                    <span className={`badge badge-perm-${share.permission}`}>
+                    <span className={`badge ${share.permission === 'download' ? 'badge-success' : 'badge-brand'}`}>
                       {share.permission === 'download' ? '⬇️ Download' : '👁️ View Only'}
                     </span>
                   </td>
                   <td>
                     {share.is_password_protected ? (
-                      <span className="badge badge-locked">🔒 Password</span>
+                      <span className="badge badge-warning">🔒 Protected</span>
                     ) : (
-                      <span className="sub-text">Standard</span>
+                      <span className="meta-sub">None</span>
                     )}
                   </td>
                   <td>
-                    <span className={share.expires_at && new Date(share.expires_at) < new Date() ? 'text-expired' : ''}>
+                    <span className={`expiry-date ${share.expires_at && new Date(share.expires_at) < new Date() ? 'expired-text' : ''}`}>
                       {formatDate(share.expires_at)}
                     </span>
                   </td>
                   <td>
-                    <span className={`badge badge-status-${share.status.toLowerCase()}`}>
+                    <span className={`badge ${share.status === 'ACTIVE' ? 'badge-success' : share.status === 'EXPIRED' ? 'badge-warning' : 'badge-danger'}`}>
                       {share.status}
                     </span>
                   </td>
-                  <td className="col-actions">
-                    {share.status === 'ACTIVE' && (
-                      <>
-                        {share.permission === 'download' ? (
-                          <button
-                            onClick={() => handleAccess(share, 'download')}
-                            className="btn-action btn-download"
-                            title="Download Shared File"
-                          >
-                            ⬇️ Download
-                          </button>
-                        ) : (
+                  <td>
+                    <div className="actions-cell">
+                      {share.status === 'ACTIVE' ? (
+                        <>
                           <button
                             onClick={() => handleAccess(share, 'view')}
-                            className="btn-action btn-view"
-                            title="View File Details"
+                            className="btn-secondary btn-xs"
+                            title="Preview File"
                           >
                             👁️ View
                           </button>
-                        )}
-                      </>
-                    )}
-                    {share.status !== 'ACTIVE' && (
-                      <span className="sub-text">Unavailable</span>
-                    )}
+                          <button
+                            onClick={() => setAiModalFile({ id: share.file_id, original_name: share.original_name })}
+                            className="btn-ai btn-xs"
+                            title="AI Document Assistant"
+                          >
+                            ✨ AI
+                          </button>
+                          {share.permission === 'download' && (
+                            <button
+                              onClick={() => handleAccess(share, 'download')}
+                              className="btn-primary btn-xs"
+                              title="Download File"
+                            >
+                              ⬇️
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="meta-sub">Inactive</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -238,51 +268,75 @@ const SharedWithMe = () => {
         </div>
       )}
 
+      {/* Password Unlock Modal */}
       {passwordModalShare && (
         <div className="modal-overlay" onClick={() => setPasswordModalShare(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>🔒 Password Protected File</h2>
-              <button className="close-btn" onClick={() => setPasswordModalShare(null)}>&times;</button>
+          <div className="modal-content password-unlock-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="unlock-modal-header">
+              <div>
+                <span className="badge badge-warning">Passcode Verification</span>
+                <h2 className="unlock-title">🔒 Password Protected File</h2>
+                <p className="unlock-sub">
+                  <strong>{passwordModalShare.sender_name}</strong> set an access passcode for "{passwordModalShare.original_name}".
+                </p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setPasswordModalShare(null)}>✕</button>
             </div>
-            {passwordError && <div className="modal-alert modal-error">{passwordError}</div>}
+
+            {passwordError && <div className="alert-box error" style={{ marginBottom: '1rem' }}>{passwordError}</div>}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault()
                 handleAccess(passwordModalShare, passwordModalShare.pendingAction, passwordInput)
               }}
-              className="modal-form"
+              className="unlock-form"
             >
-              <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
-                Please enter the access password set by <strong>{passwordModalShare.sender_name}</strong> to access "<strong>{passwordModalShare.original_name}</strong>".
-              </p>
               <div className="form-group">
-                <label>File Password</label>
+                <label className="form-label">Enter Access Passcode</label>
                 <input
                   type="password"
-                  placeholder="Enter file password"
+                  placeholder="Enter passcode to decrypt..."
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
+                  className="unlock-input"
                   required
                   autoFocus
                 />
               </div>
-              <div className="modal-actions">
+
+              <div className="unlock-actions">
                 <button
                   type="button"
-                  className="btn-cancel"
+                  className="btn-secondary"
                   onClick={() => setPasswordModalShare(null)}
                   disabled={actionInProgress}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-submit" disabled={actionInProgress}>
-                  {actionInProgress ? 'Verifying...' : 'Unlock & Access'}
+                <button type="submit" className="btn-primary" disabled={actionInProgress}>
+                  {actionInProgress ? 'Verifying Passcode...' : '🔓 Unlock & Proceed'}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewingFile && (
+        <FilePreviewModal
+          file={previewingFile}
+          onClose={() => setPreviewingFile(null)}
+        />
+      )}
+
+      {/* AI Assistant Modal */}
+      {aiModalFile && (
+        <AiAssistantModal
+          file={aiModalFile}
+          onClose={() => setAiModalFile(null)}
+        />
       )}
     </div>
   )

@@ -1,42 +1,67 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../utils/api'
 import './UploadFile.css'
 
 const UploadFile = () => {
   const [file, setFile] = useState(null)
+  const [isDragOver, setIsDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const fileInputRef = useRef(null)
   const navigate = useNavigate()
 
   const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0]
-    validateAndSetFile(selectedFile)
+    if (e.target.files && e.target.files.length > 0) {
+      validateAndSetFile(e.target.files[0])
+    }
   }
 
   const handleDragOver = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    if (!isDragOver) setIsDragOver(true)
   }
 
   const handleDragEnter = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    setIsDragOver(true)
   }
 
   const handleDragLeave = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    // Only reset if moving outside the dropzone element
+    if (e.currentTarget.contains(e.relatedTarget)) return
+    setIsDragOver(false)
   }
 
   const handleDrop = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    setIsDragOver(false)
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       validateAndSetFile(e.dataTransfer.files[0])
+    }
+  }
+
+  const triggerBrowse = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '' // clear to allow re-selecting the same file
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleRemoveFile = (e) => {
+    e.stopPropagation()
+    setFile(null)
+    setSuccess('')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -74,9 +99,14 @@ const UploadFile = () => {
       'video/mp4'
     ]
 
-    if (!allowedTypes.includes(selectedFile.type)) {
-      setError('Invalid file type. Allowed types: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, JPG, JPEG, PNG, ZIP, MP3, MP4')
-      return
+    if (selectedFile.type && !allowedTypes.includes(selectedFile.type)) {
+      // Also check by file extension for edge cases where browser mime is generic
+      const ext = selectedFile.name.split('.').pop()?.toLowerCase()
+      const allowedExts = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'jpg', 'jpeg', 'png', 'zip', 'mp3', 'mp4']
+      if (!allowedExts.includes(ext)) {
+        setError('Invalid file type. Allowed: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, JPG, JPEG, PNG, ZIP, MP3, MP4')
+        return
+      }
     }
 
     setFile(selectedFile)
@@ -98,15 +128,17 @@ const UploadFile = () => {
     formData.append('file', file)
 
     try {
-      const response = await api.post('/files/upload', formData, {
+      await api.post('/files/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         },
         onUploadProgress: (progressEvent) => {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          )
-          setUploadProgress(progress)
+          if (progressEvent.total) {
+            const progress = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            )
+            setUploadProgress(progress)
+          }
         }
       })
 
@@ -114,13 +146,14 @@ const UploadFile = () => {
       setFile(null)
       setUploadProgress(0)
 
-      // Reset file input
-      document.getElementById('fileInput').value = ''
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
 
-      // Redirect to My Files after 2 seconds
+      // Redirect to My Files after 1.5 seconds
       setTimeout(() => {
         navigate('/my-files')
-      }, 2000)
+      }, 1500)
 
     } catch (err) {
       setError(err.response?.data?.message || 'File upload failed')
@@ -138,7 +171,7 @@ const UploadFile = () => {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
   }
 
-  const getFileIcon = (type) => {
+  const getFileIcon = (type = '') => {
     if (type.includes('pdf')) return '📄'
     if (type.includes('word') || type.includes('document')) return '📝'
     if (type.includes('powerpoint') || type.includes('presentation')) return '📊'
@@ -154,31 +187,55 @@ const UploadFile = () => {
     <div className="upload-file-page">
       <div className="upload-container">
         <h1 className="upload-title">Upload File</h1>
-        <p className="upload-subtitle">Securely upload your files to the system</p>
+        <p className="upload-subtitle">Securely upload and manage your files with end-to-end access control</p>
 
         {error && <div className="upload-error">{error}</div>}
         {success && <div className="upload-success">{success}</div>}
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          id="fileInput"
+          onChange={handleFileSelect}
+          className="upload-input"
+          style={{ display: 'none' }}
+          disabled={uploading}
+        />
+
         <div 
-          className={`upload-dropzone ${file ? 'has-file' : ''}`}
+          className={`upload-dropzone ${file ? 'has-file' : ''} ${isDragOver ? 'drag-over' : ''}`}
           onDragOver={handleDragOver}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          onClick={() => {
+            if (!file && !uploading) triggerBrowse()
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !file && !uploading) {
+              e.preventDefault()
+              triggerBrowse()
+            }
+          }}
         >
-          <input
-            type="file"
-            id="fileInput"
-            onChange={handleFileSelect}
-            className="upload-input"
-            disabled={uploading}
-          />
-          
           {!file ? (
             <div className="upload-prompt">
               <div className="upload-icon">📁</div>
               <p className="upload-text">
-                Drag and drop your file here, or <span className="upload-link">browse</span>
+                Drag and drop your file here, or{' '}
+                <button
+                  type="button"
+                  className="browse-link-button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    triggerBrowse()
+                  }}
+                  disabled={uploading}
+                >
+                  Browse Files
+                </button>
               </p>
               <p className="upload-hint">
                 Maximum file size: 100MB
@@ -188,24 +245,33 @@ const UploadFile = () => {
               </p>
             </div>
           ) : (
-            <div className="upload-file-info">
+            <div className="upload-file-info" onClick={(e) => e.stopPropagation()}>
               <div className="file-icon-large">{getFileIcon(file.type)}</div>
               <div className="file-details">
                 <p className="file-name">{file.name}</p>
                 <p className="file-size">{formatFileSize(file.size)}</p>
-                <p className="file-type">{file.type}</p>
+                <p className="file-type">{file.type || 'Document'}</p>
               </div>
-              <button 
-                className="remove-file-btn"
-                onClick={() => {
-                  setFile(null)
-                  setSuccess('')
-                  document.getElementById('fileInput').value = ''
-                }}
-                disabled={uploading}
-              >
-                ✕
-              </button>
+              <div className="file-item-actions">
+                <button
+                  type="button"
+                  className="change-file-btn"
+                  onClick={triggerBrowse}
+                  disabled={uploading}
+                  title="Choose another file"
+                >
+                  Change
+                </button>
+                <button 
+                  type="button"
+                  className="remove-file-btn"
+                  onClick={handleRemoveFile}
+                  disabled={uploading}
+                  title="Remove selected file"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -218,7 +284,7 @@ const UploadFile = () => {
                 style={{ width: `${uploadProgress}%` }}
               ></div>
             </div>
-            <p className="upload-progress-text">{uploadProgress}%</p>
+            <p className="upload-progress-text">{uploadProgress}% Uploaded</p>
           </div>
         )}
 
